@@ -1,62 +1,139 @@
-import java.util.List;
-
 import junit.framework.Assert;
 
+import org.junit.Test;
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.firefox.FirefoxDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.support.ui.ExpectedCondition;
 import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.Select;
 import org.openqa.selenium.support.ui.WebDriverWait;
-
-import com.thoughtworks.selenium.SeleneseTestCase;
 
 
 public class PardotSeleniumTest{
-	private WebDriver driver = new FirefoxDriver();
-	private WebDriverWait wait = new WebDriverWait(driver, 10);
-
-	public static void main(String[] args) {
-		new PardotSeleniumTest();
-	}
+	private WebDriver driver;
+	private WebDriverWait wait;
 	
-	public PardotSeleniumTest() {
+	@Test
+	public void pardotSeleniumTest(){
+		if (System.getProperty("os.name").toLowerCase().contains("windows"))
+			System.setProperty("webdriver.chrome.driver", "chromeDriver/chromedriver.exe");	// windows chromedriver
+		else
+			System.setProperty("webdriver.chrome.driver", "chromeDriver/chromedriver");		// mac chromedriver
+		driver = new ChromeDriver();
+		wait = new WebDriverWait(driver, 10);
 		driver.get("https://pi.pardot.com/");
 		runTest();
 	}
 	
-	private void runTest(){
+	private void runTest() {
         login();
         
         // test list creation
-        String listUrl = driver.findElement(By.xpath("//*[@id='dropmenu-marketing']/li/ul/li/a[text()='Lists']")).getAttribute("href");
-        String randomName = "list" + System.currentTimeMillis();
+        String listName = "list" + System.currentTimeMillis();
         
-        goCreateList(listUrl, randomName);	// create 1st list
-        goCreateList(listUrl, randomName);	// create 2nd list same name
+        goCreateList(listName);	// create 1st list
+        goCreateList(listName);	// create 2nd list same name
         
-        WebElement errorMsg = driver.findElement(By.xpath("//*/div[@class='alert alert-error']"));
-        Assert.assertNotNull("Error message should be present", errorMsg);
-        driver.findElement(By.id("cancel_information")).click();
+        WebElement msg = driver.findElement(By.xpath("//*/div[@class='alert alert-error']"));
+        Assert.assertNotNull("Error message should be present", msg);
+        driver.findElement(By.linkText("Cancel")).click();
         
-        renameFirstList("list" + System.currentTimeMillis());	// rename list
-        goCreateList(listUrl, randomName);	// create list same name again
+        renameList(listName);	// rename list
+        goCreateList(listName);	// create list same name again
         
-        errorMsg = driver.findElement(By.xpath("//*/div[@class='alert alert-error']"));
-        Assert.assertNull("Error message should not be present", errorMsg);
+        Assert.assertTrue("Error message should not be present", driver.findElements(By.xpath("//*/div[@class='alert alert-error']")).isEmpty());
         
         // test prospect creation
+        String prospectName = "prospect" + System.currentTimeMillis();
+        goCreateProspectAddToList(prospectName, listName);
+        waitForPage(prospectName);
+        msg = driver.findElement(By.xpath("//*/div[@class='alert alert-info']"));
+        Assert.assertNotNull("Success message should be present", msg);
+        retrieveList(listName);
+        waitForElement(By.linkText(prospectName));
+        WebElement prospect = driver.findElement(By.linkText(prospectName));
+		Assert.assertNotNull("Prospect is not added to list", prospect);
         
+		sendEmail(listName);
+		
         logout();
         
         //Close the browser
         driver.quit();
 	}
 	
-	private void logout(){
+	private void sendEmail(String listName) {
+		String url = driver.findElement(By.xpath("//*[@id='dropmenu-marketing']/li/a[text()='Emails']")).getAttribute("href");
+		driver.navigate().to(url);
+		driver.findElement(By.xpath("//*[@class='btn btn-warning']")).click();
+		driver.switchTo().activeElement();
 		
+		// creating email
+		driver.findElement(By.id("name")).sendKeys("email" + System.currentTimeMillis());	
+		driver.findElements(By.xpath("//*/button[@class='btn choose-asset']")).get(1).click();
+		driver.switchTo().activeElement();
+		waitForElement(By.id("ember1136"));
+		driver.findElement(By.id("ember1136")).click();
+		driver.findElement(By.id("select-asset")).click();
+		driver.findElement(By.id("email_type_text_only")).click();
+		driver.findElement(By.id("from_template")).click();
+		driver.findElement(By.id("save_information")).click();	
+		
+		// wait for the link to get updated
+		(new WebDriverWait(driver, 10)).until(new ExpectedCondition<Boolean>() {
+            public Boolean apply(WebDriver d) {
+                return !driver.findElement(By.id("flow_sending")).getAttribute("href").equalsIgnoreCase("javascript:void(0)");
+            }
+        });
+		
+		// sending email
+		String sendLink = driver.findElement(By.id("flow_sending")).getAttribute("href");
+		driver.navigate().to(sendLink);			
+		waitForPage("Sending");
+		driver.findElement(By.xpath("//*/div[@class='chzn-container chzn-container-single']")).click();
+		driver.findElement(By.xpath("//*[@class='chzn-results']/li[text()='" + listName + "']")).click();
+		Select senderSelect = new Select(driver.findElement(By.xpath("//*/select[@name='a_sender[]']")));
+		senderSelect.selectByIndex(3);
+		driver.findElement(By.id("subject_a")).sendKeys(listName);
+		// email sending is disable, the Send button is unclickable
+		driver.findElement(By.linkText("Send Now")).click();
 	}
+	
+	private void logout(){
+		String url = driver.findElement(By.xpath("//*/a[contains(.,' Sign Out')]")).getAttribute("href");
+		driver.navigate().to(url);
+	}
+	
+	private void retrieveList(String listName){
+		String url = driver.findElement(By.xpath("//*[@id='dropmenu-marketing']/li/ul/li/a[text()='Lists']")).getAttribute("href");
+		driver.navigate().to(url);
+		driver.findElement(By.linkText(listName)).click();
+		waitForPage(listName);
+	}
+	
+	private void goCreateProspectAddToList(String prospectName, String listName) {
+		String url = driver.findElement(By.xpath("//*[@id='dropmenu-prospects']/li/a[text()='Prospect List']")).getAttribute("href");
+		driver.navigate().to(url);
+        waitForPage("Prospects");
+        
+        //creating prospect
+        driver.findElement(By.id("pr_link_create")).click();		
+        waitForElement(By.id("default_field_3361"));
+        driver.findElement(By.id("default_field_3361")).sendKeys(prospectName);
+        driver.findElement(By.id("email")).sendKeys(System.currentTimeMillis() + "@user.com");
+        Select campaignSelect = new Select(driver.findElement(By.id("campaign_id")));
+        campaignSelect.selectByIndex(3);
+        Select profileSelect = new Select(driver.findElement(By.id("profile_id")));
+        profileSelect.selectByIndex(3);
+        driver.findElement(By.id("score")).sendKeys("5");
+        driver.findElement(By.xpath("//*/h4[contains(.,'Lists')]")).click();
+        driver.findElement(By.linkText("Select a list to add...")).click();
+        driver.findElement(By.xpath("//*[@class='chzn-results']/li[text()='" + listName + "']")).click();
+        driver.findElement(By.name("commit")).click();
+	}
+	
 	
 	private void login() {
 		driver.findElement(By.id("email_address")).sendKeys("pardot.applicant@pardot.com");
@@ -65,16 +142,18 @@ public class PardotSeleniumTest{
         waitForPage("Dashboard");
 	}
 	
-	private void renameFirstList(String name){
-		 driver.findElement(By.xpath("//*[@id='listx_row_a0'/td/a")).click();
-		 driver.findElement(By.xpath("//*/a[text()='Edit']")).click();
+	private void renameList(String oldName){
+		 driver.findElement(By.linkText(oldName)).click();
+		 waitForElement(By.linkText("Edit"));
+		 driver.findElement(By.linkText("Edit")).click();
 		 driver.switchTo().activeElement();
 	     waitForElement(By.id("name"));
-	     driver.findElement(By.id("name")).sendKeys(name);	
+	     driver.findElement(By.id("name")).sendKeys("_renamed");	
 	     driver.findElement(By.id("save_information")).click();
 	}
 	
-	private void goCreateList(String url, String name){
+	private void goCreateList(String name){
+		String url = driver.findElement(By.xpath("//*[@id='dropmenu-marketing']/li/ul/li/a[text()='Lists']")).getAttribute("href");
 		driver.navigate().to(url);
         waitForPage("Lists");
         driver.findElement(By.id("listxistx_link_create")).click();		//creating list
