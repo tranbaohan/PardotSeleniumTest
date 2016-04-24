@@ -14,7 +14,9 @@ To run this test, please proceed with the following:
 
 
 Potential Eclipse workspace issues:
-1. "unbound classpath variable M2_REPO/..." 
-- Can be resolved by adding the classpath variable M2_REPO to eclipse, the value should be the path to .m2/repositories
-2. "No Junit test found" when attempting to run the test
-- The eclipse configuration may be incorrected. Make sure that the test class is in the source folder: select the src folder, right click, and select "Use as source folder"
+
+- "unbound classpath variable M2_REPO/..."
+  + Can be resolved by adding the classpath variable M2_REPO to eclipse, the value should be the path to .m2/repositories
+
+- "No Junit test found" when attempting to run the test
+  + The eclipse configuration may be incorrected. Make sure that the test class is in the source folder: select the src folder, right click, and select "Use as source folder"
